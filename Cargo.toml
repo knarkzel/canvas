@@ -2,17 +2,23 @@
 name = "canvas"
 version = "0.1.0"
 edition = "2021"
+authors = ["Knarkzel <knarkzel@gmail.com>"]
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
 
 [dependencies]
-ureq = { version = "2.6.1", features = ["json"] }
-anyhow = "1.0.68"
-dialoguer = "0.10.2"
-serde_json = "1.0.91"
-serde = { version = "1.0.152", features = ["derive"] }
-clap = { version = "4.1.1", features = ["derive"] }
 open = "3.2.0"
-platform-dirs = "0.3.0"
 toml = "0.5.10"
-chrono = { version = "0.4.23", features = ["serde"] }
-comfy-table = "6.1.4"
+anyhow = "1.0.68"
 indicatif = "0.17.3"
+serde_json = "1.0.91"
+comfy-table = "6.1.4"
+platform-dirs = "0.3.0"
+clap = { version = "4.1.1", features = ["derive"] }
+chrono = { version = "0.4.23", features = ["serde"] }
+serde = { version = "1.0.152", features = ["derive"] }
+dialoguer = { version = "0.10.2", default-features = false }
+ureq = { version = "2.6.1", default-features = false, features = ["json", "tls"] }
