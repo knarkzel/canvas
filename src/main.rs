@@ -34,19 +34,20 @@ impl Config {
     }
 
     fn read() -> Result<Config> {
-        let config_file = Config::path()?;
-        let raw = std::fs::read_to_string(config_file)?;
-        Ok(toml::from_str(&raw)?)
+        let path = Config::path()?;
+        let config = std::fs::read_to_string(path)?;
+        Ok(toml::from_str(&config)?)
     }
 
-    fn write(self) -> Result<()> {
-        let config_file = Config::path()?;
-        let toml = toml::to_string(&self)?;
-        std::fs::write(&config_file, toml)?;
-        println!("Wrote settings to {}", config_file.display());
+    fn write(&self) -> Result<()> {
+        let path = Config::path()?;
+        std::fs::write(&path, toml::to_string(self)?)?;
         Ok(())
     }
 }
+
+// HTTP Client
+struct Client;
 
 fn main() -> Result<()> {
     let args = Args::parse();
