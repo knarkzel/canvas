@@ -7,7 +7,6 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 struct Args {
-    /// Subcommand to run
     #[command(subcommand)]
     command: Command,
 }
