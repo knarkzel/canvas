@@ -14,7 +14,7 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Authenticate and store token locally
+    /// Login and store token
     Login,
     /// Fetch assignments from Canvas
     Assignments,
