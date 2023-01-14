@@ -2,9 +2,10 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use dialoguer::Input;
 use platform_dirs::AppDirs;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// Args
 #[derive(Parser)]
 struct Args {
     #[command(subcommand)]
@@ -19,21 +20,32 @@ enum Command {
     Assignments,
 }
 
+// Config
 #[derive(Serialize, Deserialize)]
 struct Config {
     token: String,
 }
 
-fn config_path() -> Result<PathBuf> {
-    let app_dirs = AppDirs::new(Some("canvas"), false).ok_or(anyhow!("Config location is invalid"))?;
-    std::fs::create_dir_all(&app_dirs.config_dir)?;
-    Ok(app_dirs.config_dir.join("canvas.toml"))
-}
+impl Config {
+    fn path() -> Result<PathBuf> {
+        let dirs = AppDirs::new(Some("canvas"), false).ok_or(anyhow!("Invalid config"))?;
+        std::fs::create_dir_all(&dirs.config_dir)?;
+        Ok(dirs.config_dir.join("canvas.toml"))
+    }
 
-fn read_config() -> Result<Config> {
-    let config_file = config_path()?;
-    let raw = std::fs::read_to_string(config_file)?;
-    Ok(toml::from_str(&raw)?)
+    fn read() -> Result<Config> {
+        let config_file = Config::path()?;
+        let raw = std::fs::read_to_string(config_file)?;
+        Ok(toml::from_str(&raw)?)
+    }
+
+    fn write(self) -> Result<()> {
+        let config_file = Config::path()?;
+        let toml = toml::to_string(&self)?;
+        std::fs::write(&config_file, toml)?;
+        println!("Wrote settings to {}", config_file.display());
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
@@ -45,18 +57,13 @@ fn main() -> Result<()> {
             let token = Input::<String>::new()
                 .with_prompt("Token")
                 .interact_text()?;
-
-            // Create config file
-            let config_file = config_path()?;
-            let config = Config { token };
-            let toml = toml::to_string(&config)?;
-            std::fs::write(&config_file, toml)?;
-            println!("Wrote settings to {}", config_file.display());
+            Config { token }.write()?;
+            println!("Wrote settings to {}", Config::path()?.display());
         }
         Command::Assignments => {
-            let Config { token } = read_config()?;
+            let Config { token } = Config::read()?;
             todo!()
-        },
+        }
     }
 
     Ok(())
