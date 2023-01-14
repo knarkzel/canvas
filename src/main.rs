@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, NaiveDate};
 use clap::{Parser, Subcommand};
 use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Table};
 use dialoguer::Input;
 use indicatif::ProgressBar;
 use platform_dirs::AppDirs;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, path::PathBuf, time::Duration};
+use std::{path::PathBuf, time::Duration};
 use ureq::Response;
 
 // Args
@@ -50,21 +50,6 @@ impl Config {
     }
 }
 
-// Types
-#[derive(Debug, Serialize, Deserialize)]
-struct Course {
-    id: usize,
-    name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Assignment {
-    id: usize,
-    name: String,
-    due_at: DateTime<Utc>,
-    description: Option<String>,
-}
-
 // Helpers
 fn fetch(route: &str) -> Result<Response> {
     let Config { token } = Config::read()?;
@@ -83,6 +68,29 @@ fn load_with_message<T, U: FnOnce() -> Result<T>, V: ToString>(message: V, funct
     Ok(result)
 }
 
+// Types
+#[derive(Debug, Serialize, Deserialize)]
+struct Course {
+    id: usize,
+    name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Assignment {
+    id: usize,
+    name: String,
+    due_at: DateTime<Utc>,
+    description: Option<String>,
+}
+
+#[derive(Debug)]
+struct Output {
+    course_name: String,
+    assignment_name: String,
+    date: NaiveDate,
+    days_left: i64,
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -96,36 +104,52 @@ fn main() -> Result<()> {
             println!("Wrote settings to {}", Config::path()?.display());
         }
         Command::Assignments => {
+            // Get assignments from each course
             let courses = load_with_message("Loading courses...", || {
                 Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
             })?;
+            let mut output = Vec::new();
             for Course { id, name } in courses {
                 let assignments = load_with_message(format!("Loading assignments for {name}..."), || {
                     let route = format!("courses/{id}/assignments");
                     Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
                 })?;
-                if assignments.len() == 0 {
-                    continue;
-                }
-                let mut table = Table::new();
-                table
-                    .load_preset(UTF8_FULL)
-                    .apply_modifier(UTF8_ROUND_CORNERS)
-                    .set_header(vec![
-                        Cell::new("Name"),
-                        Cell::new("Date"),
-                        Cell::new("Days left"),
-                    ]);
-                for Assignment { name, due_at, .. } in assignments {
+                let course_name = name;
+                let outputs = assignments.into_iter().map(|Assignment { name, due_at, ..}| {
                     let now = chrono::offset::Utc::now();
                     let date = due_at.date_naive();
-                    let delta = (due_at - now).num_days();
-                    if delta >= 0 {
-                        table.add_row(vec![Cell::new(name), Cell::new(date), Cell::new(delta)]);
+                    let days_left = (due_at - now).num_days();
+                    Output {
+                        course_name: course_name.clone(),
+                        assignment_name: name,
+                        date,
+                        days_left,
                     }
-                }
-                println!("{table}");
+                }).filter(|it| it.days_left >= 0);
+                output.extend(outputs);
             }
+            output.sort_by_key(|it| it.days_left);
+
+            // Create table
+            let mut table = Table::new();
+            table
+                .load_preset(UTF8_FULL)
+                .apply_modifier(UTF8_ROUND_CORNERS)
+                .set_header(vec![
+                    Cell::new("Course"),
+                    Cell::new("Name"),
+                    Cell::new("Date"),
+                    Cell::new("Days left"),
+                ]);
+            for Output { course_name, assignment_name, date, days_left } in output {
+                table.add_row(vec![
+                    Cell::new(course_name),
+                    Cell::new(assignment_name),
+                    Cell::new(date),
+                    Cell::new(days_left),
+                ]);
+            }
+            println!("{table}");
         }
     }
 
