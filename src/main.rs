@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use dialoguer::Input;
 use platform_dirs::AppDirs;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::path::PathBuf;
 
 // Args
@@ -46,8 +46,14 @@ impl Config {
     }
 }
 
-// HTTP Client
-struct Client;
+// Helpers
+fn fetch<T: DeserializeOwned>(url: &str) -> Result<T> {
+    let Config { token } = Config::read()?;
+    Ok(ureq::get(&format!("https://uia.instructure.com/{url}"))
+        .set("Authorization", &token)
+        .call()?
+        .into_json::<T>()?)
+}
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -62,7 +68,6 @@ fn main() -> Result<()> {
             println!("Wrote settings to {}", Config::path()?.display());
         }
         Command::Assignments => {
-            let Config { token } = Config::read()?;
             todo!()
         }
     }
