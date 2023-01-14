@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use dialoguer::Input;
 use platform_dirs::AppDirs;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use ureq::Response;
 use std::path::PathBuf;
 
 // Args
@@ -47,12 +48,11 @@ impl Config {
 }
 
 // Helpers
-fn fetch<T: DeserializeOwned>(url: &str) -> Result<T> {
+fn fetch(route: &str) -> Result<Response> {
     let Config { token } = Config::read()?;
-    Ok(ureq::get(&format!("https://uia.instructure.com/{url}"))
-        .set("Authorization", &token)
-        .call()?
-        .into_json::<T>()?)
+    Ok(ureq::get(&format!("https://uia.instructure.com/api/v1/{route}"))
+       .set("Authorization", &format!("Bearer {token}"))
+       .call()?)
 }
 
 fn main() -> Result<()> {
@@ -68,7 +68,8 @@ fn main() -> Result<()> {
             println!("Wrote settings to {}", Config::path()?.display());
         }
         Command::Assignments => {
-            todo!()
+            let output = fetch("users/self/favorites/courses")?.into_string()?;
+            println!("{output}");
         }
     }
 
