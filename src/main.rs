@@ -50,16 +50,6 @@ impl Config {
     }
 }
 
-// Helpers
-fn fetch(route: &str) -> Result<Response> {
-    let Config { token } = Config::read()?;
-    Ok(
-        ureq::get(&format!("https://uia.instructure.com/api/v1/{route}"))
-            .set("Authorization", &format!("Bearer {token}"))
-            .call()?,
-    )
-}
-
 // Types
 #[derive(Debug, Serialize, Deserialize)]
 struct Course {
@@ -75,19 +65,22 @@ struct Assignment {
     description: Option<String>,
 }
 
-struct Link {
-    url: String,
-    text: String,
+// Helpers
+fn fetch(route: &str) -> Result<Response> {
+    let Config { token } = Config::read()?;
+    Ok(
+        ureq::get(&format!("https://uia.instructure.com/api/v1/{route}"))
+            .set("Authorization", &format!("Bearer {token}"))
+            .call()?,
+    )
 }
 
-impl Display for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "\u{1b}]8;;{}\u{1b}\\{}\u{1b}]8;;\u{1b}\\",
-            self.url, self.text
-        )
-    }
+fn load_with_message<T, U: FnOnce() -> Result<T>, V: ToString>(message: V, function: U) -> Result<T> {
+    let spinner = ProgressBar::new_spinner().with_message(message.to_string());
+    spinner.enable_steady_tick(Duration::from_millis(10));
+    let result = function()?;
+    spinner.finish_and_clear();
+    Ok(result)
 }
 
 fn main() -> Result<()> {
@@ -103,24 +96,17 @@ fn main() -> Result<()> {
             println!("Wrote settings to {}", Config::path()?.display());
         }
         Command::Assignments => {
-            let spinner = ProgressBar::new_spinner().with_message("Loading courses...");
-            spinner.enable_steady_tick(Duration::from_millis(10));
-            let courses = fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?;
-            spinner.finish_and_clear();
+            let courses = load_with_message("Loading courses...", || {
+                Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
+            })?;
             for Course { id, name } in courses {
-                let spinner = ProgressBar::new_spinner().with_message(format!("Loading assignments for {name}..."));
-                spinner.enable_steady_tick(Duration::from_millis(10));
-                let route = format!("courses/{id}/assignments");
-                let assignments = fetch(&route)?.into_json::<Vec<Assignment>>()?;
-                spinner.finish_and_clear();
+                let assignments = load_with_message(format!("Loading assignments for {name}..."), || {
+                    let route = format!("courses/{id}/assignments");
+                    Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
+                })?;
                 if assignments.len() == 0 {
                     continue;
                 }
-                let link = Link {
-                    url: format!("https://uia.instructure.com/courses/{id}/assignments"),
-                    text: name,
-                };
-                println!("{link}");
                 let mut table = Table::new();
                 table
                     .load_preset(UTF8_FULL)
