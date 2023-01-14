@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use dialoguer::Input;
 use platform_dirs::AppDirs;
 use serde::{Serialize, Deserialize};
-use std::{path::PathBuf, fs::File, io::Write};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 struct Args {
@@ -49,16 +49,10 @@ fn main() -> Result<()> {
 
             // Create config file
             let config_file = config_path()?;
-            let message = format!("Wrote settings to {}", config_file.display());
-
-            // Serialize to toml
-            let mut file = File::create(config_file)?;
             let config = Config { token };
             let toml = toml::to_string(&config)?;
-
-            // Write to file
-            file.write_all(toml.as_bytes())?;
-            println!("{message}");
+            std::fs::write(&config_file, toml)?;
+            println!("Wrote settings to {}", config_file.display());
         }
         Command::Assignments => {
             let Config { token } = read_config()?;
