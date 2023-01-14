@@ -1,0 +1,15 @@
+[package]
+name = "canvas"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ureq = "2.6.1"
+anyhow = "1.0.68"
+dialoguer = "0.10.2"
+serde_json = "1.0.91"
+serde = { version = "1.0.152", features = ["derive"] }
+clap = { version = "4.1.1", features = ["derive"] }
+open = "3.2.0"
+platform-dirs = "0.3.0"
+toml = "0.5.10"
