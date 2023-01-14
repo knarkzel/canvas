@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
 use dialoguer::Input;
 use platform_dirs::AppDirs;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 use ureq::Response;
 use std::path::PathBuf;
+use comfy_table::{Table, presets::UTF8_FULL, modifiers::UTF8_ROUND_CORNERS};
 
 // Args
 #[derive(Parser)]
@@ -55,6 +57,21 @@ fn fetch(route: &str) -> Result<Response> {
        .call()?)
 }
 
+// Types
+#[derive(Debug, Serialize, Deserialize)]
+struct Course {
+    id: usize,
+    name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Assignment {
+    id: usize,
+    name: String,
+    due_at: DateTime<Utc>,
+    description: Option<String>,
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -68,8 +85,36 @@ fn main() -> Result<()> {
             println!("Wrote settings to {}", Config::path()?.display());
         }
         Command::Assignments => {
-            let output = fetch("users/self/favorites/courses")?.into_string()?;
-            println!("{output}");
+            let courses = fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?;
+            for Course { id, name } in courses {
+                let route = format!("courses/{id}/assignments");
+                let assignments = fetch(&route)?.into_json::<Vec<Assignment>>()?;
+                if assignments.len() == 0 {
+                    continue;
+                }
+                let mut table = Table::new();
+                table
+                    .load_preset(UTF8_FULL)
+                    .apply_modifier(UTF8_ROUND_CORNERS)
+                    .set_header(vec![
+                        name.as_str(),
+                        "Date",
+                        "Days left",
+                    ]);
+                for Assignment { name, due_at, .. } in assignments {
+                    let now = chrono::offset::Utc::now();
+                    let date = due_at.date_naive();
+                    let delta = (due_at - now).num_days();
+                    if delta >= 0 {
+                        table.add_row(vec![
+                            name,
+                            format!("{date}"),
+                            format!("{delta}"),
+                        ]);
+                    } 
+                }
+                println!("{table}");
+            }
         }
     }
 

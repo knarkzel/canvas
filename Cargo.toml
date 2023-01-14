@@ -13,3 +13,5 @@ clap = { version = "4.1.1", features = ["derive"] }
 open = "3.2.0"
 platform-dirs = "0.3.0"
 toml = "0.5.10"
+chrono = { version = "0.4.23", features = ["serde"] }
+comfy-table = "6.1.4"
