@@ -40,14 +40,14 @@ impl Config {
         Ok(dirs.config_dir.join("canvas.toml"))
     }
 
-    fn read() -> Result<Config> {
-        let path = Config::path()?;
+    fn read() -> Result<Self> {
+        let path = Self::path()?;
         let config = std::fs::read_to_string(path)?;
         Ok(toml::from_str(&config)?)
     }
 
     fn write(&self) -> Result<()> {
-        let path = Config::path()?;
+        let path = Self::path()?;
         std::fs::write(&path, toml::to_string(self)?)?;
         Ok(())
     }
@@ -74,14 +74,55 @@ fn load_with_message<T, U: FnOnce() -> Result<T>, V: ToString>(
     Ok(result)
 }
 
-// Types
 #[derive(Debug, Serialize, Deserialize)]
+struct Cache {
+    time: DateTime<Utc>,
+    output: Vec<Output>,
+}
+
+impl Cache {
+    fn new(output: Vec<Output>) -> Self {
+        let time = chrono::offset::Utc::now();
+        Self { time, output }
+    }
+
+    fn get() -> Result<Self> {
+        let cache = Cache::read()?;
+        let now = chrono::offset::Utc::now();
+        if (now - cache.time).num_minutes() > 30 {
+            Err(anyhow!("Cache invalidated"))
+        } else {
+            Ok(cache)
+        }
+    }
+    
+    fn path() -> Result<PathBuf> {
+        let dirs = AppDirs::new(Some("canvas"), false).ok_or(anyhow!("Invalid cache"))?;
+        std::fs::create_dir_all(&dirs.config_dir)?;
+        Ok(dirs.config_dir.join("cache.toml"))
+    }
+
+    fn read() -> Result<Self> {
+        let path = Self::path()?;
+        let config = std::fs::read_to_string(path)?;
+        Ok(toml::from_str(&config)?)
+    }
+
+    fn write(&self) -> Result<()> {
+        let path = Self::path()?;
+        std::fs::write(&path, toml::to_string(self)?)?;
+        Ok(())
+    }
+}
+
+// Types
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Course {
     id: usize,
     name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Assignment {
     id: usize,
     name: String,
@@ -89,7 +130,7 @@ struct Assignment {
     description: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Output {
     course_name: String,
     assignment_name: String,
@@ -131,34 +172,43 @@ fn main() -> Result<()> {
         }
         Command::Assignments => {
             // Get assignments from each course
-            let courses = load_with_message("Loading courses...", || {
-                Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
-            })?;
-            let mut output = Vec::new();
-            for Course { id, name } in courses {
-                let assignments =
-                    load_with_message(format!("Loading assignments for {name}..."), || {
-                        let route = format!("courses/{id}/assignments");
-                        Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
+            let output = match Cache::get() {
+                Ok(cache) => cache.output,
+                Err(_) => {
+                    let courses = load_with_message("Loading courses...", || {
+                        Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
                     })?;
-                let course_name = name;
-                let outputs = assignments
-                    .into_iter()
-                    .map(|Assignment { name, due_at, .. }| {
-                        let now = chrono::offset::Utc::now();
-                        let date = due_at.date_naive();
-                        let days_left = (due_at - now).num_days();
-                        Output {
-                            course_name: course_name.clone(),
-                            assignment_name: name,
-                            date,
-                            days_left,
-                        }
-                    })
-                    .filter(|output| output.days_left >= 0);
-                output.extend(outputs);
-            }
-            output.sort_by_key(|it| it.days_left);
+                    let mut output = Vec::new();
+                    for Course { id, name } in courses {
+                        let assignments =
+                            load_with_message(format!("Loading assignments for {name}..."), || {
+                                let route = format!("courses/{id}/assignments");
+                                Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
+                            })?;
+                        let course_name = name;
+                        let outputs = assignments
+                            .into_iter()
+                            .map(|Assignment { name, due_at, .. }| {
+                                let now = chrono::offset::Utc::now();
+                                let date = due_at.date_naive();
+                                let days_left = (due_at - now).num_days();
+                                Output {
+                                    course_name: course_name.clone(),
+                                    assignment_name: name,
+                                    date,
+                                    days_left,
+                                }
+                            })
+                            .filter(|output| output.days_left >= 0);
+                        output.extend(outputs);
+                    }
+                    output.sort_by_key(|it| it.days_left);
+
+                    // Store to cache then return
+                    Cache::new(output.clone()).write()?;
+                    output
+                },
+            };
 
             // Create table
             let mut table = Table::new();
