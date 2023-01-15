@@ -55,7 +55,6 @@ dependencies = [
  "platform-dirs",
  "serde",
  "serde_json",
- "toml",
  "ureq",
 ]
 
@@ -864,15 +863,6 @@ name = "tinyvec_macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
-
-[[package]]
-name = "toml"
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1333c76748e868a4d9d1017b5ab53171dfd095f70c712fdb4653a406547f598f"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "unicode-bidi"

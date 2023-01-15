@@ -37,18 +37,18 @@ impl Config {
     fn path() -> Result<PathBuf> {
         let dirs = AppDirs::new(Some("canvas"), false).ok_or(anyhow!("Invalid config"))?;
         std::fs::create_dir_all(&dirs.config_dir)?;
-        Ok(dirs.config_dir.join("canvas.toml"))
+        Ok(dirs.config_dir.join("canvas.json"))
     }
 
     fn read() -> Result<Self> {
         let path = Self::path()?;
         let config = std::fs::read_to_string(path)?;
-        Ok(toml::from_str(&config)?)
+        Ok(serde_json::from_str(&config)?)
     }
 
     fn write(&self) -> Result<()> {
         let path = Self::path()?;
-        std::fs::write(&path, toml::to_string(self)?)?;
+        std::fs::write(&path, serde_json::to_string_pretty(self)?)?;
         Ok(())
     }
 }
@@ -85,10 +85,7 @@ impl Cache {
     fn new() -> Self {
         let cache = Cache::read().unwrap_or_default();
         let time = chrono::offset::Utc::now();
-        Self {
-            time,
-            ..cache
-        }
+        Self { time, ..cache }
     }
 
     fn get() -> Result<Self> {
@@ -104,18 +101,18 @@ impl Cache {
     fn path() -> Result<PathBuf> {
         let dirs = AppDirs::new(Some("canvas"), false).ok_or(anyhow!("Invalid cache"))?;
         std::fs::create_dir_all(&dirs.config_dir)?;
-        Ok(dirs.config_dir.join("cache.toml"))
+        Ok(dirs.config_dir.join("cache.json"))
     }
 
     fn read() -> Result<Self> {
         let path = Self::path()?;
         let config = std::fs::read_to_string(path)?;
-        Ok(toml::from_str(&config)?)
+        Ok(serde_json::from_str(&config)?)
     }
 
     fn write(&self) -> Result<()> {
         let path = Self::path()?;
-        std::fs::write(&path, toml::to_string(self)?)?;
+        std::fs::write(&path, serde_json::to_string_pretty(self)?)?;
         Ok(())
     }
 }
@@ -170,7 +167,7 @@ fn main() -> Result<()> {
                     cache.courses = Some(courses.clone());
                     cache.write()?;
                     courses
-                },
+                }
             };
 
             // Create table
