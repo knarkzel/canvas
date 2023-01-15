@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, NaiveDate, Utc};
 use clap::{Parser, Subcommand};
 use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Table};
 use dialoguer::Input;
@@ -20,7 +20,9 @@ struct Args {
 enum Command {
     /// Login and store token
     Login,
-    /// Fetch assignments from Canvas
+    /// Get courses for this semester
+    Courses,
+    /// Fetch assignments that aren't completed yet
     Assignments,
 }
 
@@ -60,7 +62,10 @@ fn fetch(route: &str) -> Result<Response> {
     )
 }
 
-fn load_with_message<T, U: FnOnce() -> Result<T>, V: ToString>(message: V, function: U) -> Result<T> {
+fn load_with_message<T, U: FnOnce() -> Result<T>, V: ToString>(
+    message: V,
+    function: U,
+) -> Result<T> {
     let spinner = ProgressBar::new_spinner().with_message(message.to_string());
     spinner.enable_steady_tick(Duration::from_millis(10));
     let result = function()?;
@@ -96,12 +101,32 @@ fn main() -> Result<()> {
 
     match args.command {
         Command::Login => {
+            // Open token settings page in browser
             open::that("https://uia.instructure.com/profile/settings#access_tokens_holder")?;
+
+            // Store token in configuration file
             let token = Input::<String>::new()
                 .with_prompt("Token")
                 .interact_text()?;
             Config { token }.write()?;
             println!("Wrote settings to {}", Config::path()?.display());
+        }
+        Command::Courses => {
+            // Get current favorite courses
+            let courses = load_with_message("Loading courses...", || {
+                Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
+            })?;
+
+            // Create table
+            let mut table = Table::new();
+            table
+                .load_preset(UTF8_FULL)
+                .apply_modifier(UTF8_ROUND_CORNERS)
+                .set_header(vec![Cell::new("Course")]);
+            for Course { name, .. } in courses {
+                table.add_row(vec![Cell::new(name)]);
+            }
+            println!("{table}");
         }
         Command::Assignments => {
             // Get assignments from each course
@@ -110,22 +135,26 @@ fn main() -> Result<()> {
             })?;
             let mut output = Vec::new();
             for Course { id, name } in courses {
-                let assignments = load_with_message(format!("Loading assignments for {name}..."), || {
-                    let route = format!("courses/{id}/assignments");
-                    Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
-                })?;
+                let assignments =
+                    load_with_message(format!("Loading assignments for {name}..."), || {
+                        let route = format!("courses/{id}/assignments");
+                        Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
+                    })?;
                 let course_name = name;
-                let outputs = assignments.into_iter().map(|Assignment { name, due_at, ..}| {
-                    let now = chrono::offset::Utc::now();
-                    let date = due_at.date_naive();
-                    let days_left = (due_at - now).num_days();
-                    Output {
-                        course_name: course_name.clone(),
-                        assignment_name: name,
-                        date,
-                        days_left,
-                    }
-                }).filter(|it| it.days_left >= 0);
+                let outputs = assignments
+                    .into_iter()
+                    .map(|Assignment { name, due_at, .. }| {
+                        let now = chrono::offset::Utc::now();
+                        let date = due_at.date_naive();
+                        let days_left = (due_at - now).num_days();
+                        Output {
+                            course_name: course_name.clone(),
+                            assignment_name: name,
+                            date,
+                            days_left,
+                        }
+                    })
+                    .filter(|output| output.days_left >= 0);
                 output.extend(outputs);
             }
             output.sort_by_key(|it| it.days_left);
@@ -141,7 +170,13 @@ fn main() -> Result<()> {
                     Cell::new("Date"),
                     Cell::new("Days left"),
                 ]);
-            for Output { course_name, assignment_name, date, days_left } in output {
+            for Output {
+                course_name,
+                assignment_name,
+                date,
+                days_left,
+            } in output
+            {
                 table.add_row(vec![
                     Cell::new(course_name),
                     Cell::new(assignment_name),

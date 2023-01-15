@@ -7,7 +7,8 @@ Usage: canvas <COMMAND>
 
 Commands:
   login        Login and store token
-  assignments  Fetch assignments from Canvas
+  courses      Get courses for this semester
+  assignments  Fetch assignments that aren't completed yet
   help         Print this message or the help of the given subcommand(s)
 
 Options:
