@@ -74,28 +74,33 @@ fn load_with_message<T, U: FnOnce() -> Result<T>, V: ToString>(
     Ok(result)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 struct Cache {
     time: DateTime<Utc>,
-    output: Vec<Output>,
+    courses: Option<Vec<Course>>,
+    output: Option<Vec<Output>>,
 }
 
 impl Cache {
-    fn new(output: Vec<Output>) -> Self {
+    fn new() -> Self {
+        let cache = Cache::read().unwrap_or_default();
         let time = chrono::offset::Utc::now();
-        Self { time, output }
+        Self {
+            time,
+            ..cache
+        }
     }
 
     fn get() -> Result<Self> {
         let cache = Cache::read()?;
         let now = chrono::offset::Utc::now();
-        if (now - cache.time).num_minutes() > 30 {
+        if (now - cache.time).num_minutes() >= 10 {
             Err(anyhow!("Cache invalidated"))
         } else {
             Ok(cache)
         }
     }
-    
+
     fn path() -> Result<PathBuf> {
         let dirs = AppDirs::new(Some("canvas"), false).ok_or(anyhow!("Invalid cache"))?;
         std::fs::create_dir_all(&dirs.config_dir)?;
@@ -155,9 +160,18 @@ fn main() -> Result<()> {
         }
         Command::Courses => {
             // Get current favorite courses
-            let courses = load_with_message("Loading courses...", || {
-                Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
-            })?;
+            let courses = match Cache::get().map(|it| it.courses) {
+                Ok(Some(courses)) => courses,
+                _ => {
+                    let courses = load_with_message("Loading courses...", || {
+                        Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
+                    })?;
+                    let mut cache = Cache::new();
+                    cache.courses = Some(courses.clone());
+                    cache.write()?;
+                    courses
+                },
+            };
 
             // Create table
             let mut table = Table::new();
@@ -172,19 +186,21 @@ fn main() -> Result<()> {
         }
         Command::Assignments => {
             // Get assignments from each course
-            let output = match Cache::get() {
-                Ok(cache) => cache.output,
-                Err(_) => {
+            let output = match Cache::get().map(|it| it.output) {
+                Ok(Some(output)) => output,
+                _ => {
                     let courses = load_with_message("Loading courses...", || {
                         Ok(fetch("users/self/favorites/courses")?.into_json::<Vec<Course>>()?)
                     })?;
                     let mut output = Vec::new();
                     for Course { id, name } in courses {
-                        let assignments =
-                            load_with_message(format!("Loading assignments for {name}..."), || {
+                        let assignments = load_with_message(
+                            format!("Loading assignments for {name}..."),
+                            || {
                                 let route = format!("courses/{id}/assignments");
                                 Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
-                            })?;
+                            },
+                        )?;
                         let course_name = name;
                         let outputs = assignments
                             .into_iter()
@@ -205,9 +221,11 @@ fn main() -> Result<()> {
                     output.sort_by_key(|it| it.days_left);
 
                     // Store to cache then return
-                    Cache::new(output.clone()).write()?;
+                    let mut cache = Cache::new();
+                    cache.output = Some(output.clone());
+                    cache.write()?;
                     output
-                },
+                }
             };
 
             // Create table
