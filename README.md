@@ -1,7 +1,8 @@
 # canvas
 
+Latest release can be found under [releases](https://github.com/knarkzel/canvas/releases/).
+
 ```
-$ cargo install --git https://github.com/knarkzel/canvas
 $ canvas
 Usage: canvas <COMMAND>
 
