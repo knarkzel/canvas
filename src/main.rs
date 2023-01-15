@@ -11,6 +11,7 @@ use ureq::Response;
 
 // Args
 #[derive(Parser)]
+#[command(author, version)]
 struct Args {
     #[command(subcommand)]
     command: Command,
