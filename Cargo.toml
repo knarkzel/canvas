@@ -7,7 +7,6 @@ authors = ["Knarkzel <knarkzel@gmail.com>"]
 [profile.release]
 lto = true
 strip = true
-opt-level = "z"
 
 [dependencies]
 open = "3.2.0"

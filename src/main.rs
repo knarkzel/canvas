@@ -128,7 +128,7 @@ struct Course {
 struct Assignment {
     id: usize,
     name: String,
-    due_at: DateTime<Utc>,
+    due_at: Option<DateTime<Utc>>,
     description: Option<String>,
 }
 
@@ -136,7 +136,7 @@ struct Assignment {
 struct Output {
     course_name: String,
     assignment_name: String,
-    date: NaiveDate,
+    date: Option<NaiveDate>,
     days_left: i64,
 }
 
@@ -195,6 +195,7 @@ fn main() -> Result<()> {
                             format!("Loading assignments for {name}..."),
                             || {
                                 let route = format!("courses/{id}/assignments");
+                                eprintln!("{}", fetch(&route)?.into_string()?);
                                 Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
                             },
                         )?;
@@ -203,8 +204,11 @@ fn main() -> Result<()> {
                             .into_iter()
                             .map(|Assignment { name, due_at, .. }| {
                                 let now = chrono::offset::Utc::now();
-                                let date = due_at.date_naive();
-                                let days_left = (due_at - now).num_days();
+                                let date = due_at.map(|it| it.date_naive());
+                                let days_left = match due_at {
+                                    Some(due_at) => (due_at - now).num_days(),
+                                    None => 0,
+                                };
                                 Output {
                                     course_name: course_name.clone(),
                                     assignment_name: name,
@@ -246,8 +250,8 @@ fn main() -> Result<()> {
                 table.add_row(vec![
                     Cell::new(course_name),
                     Cell::new(assignment_name),
-                    Cell::new(date),
-                    Cell::new(days_left),
+                    date.map(Cell::new).unwrap_or(Cell::new("")),
+                    if days_left == 0 { Cell::new("") } else { Cell::new(days_left) },
                 ]);
             }
             println!("{table}");
