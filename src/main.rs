@@ -195,7 +195,6 @@ fn main() -> Result<()> {
                             format!("Loading assignments for {name}..."),
                             || {
                                 let route = format!("courses/{id}/assignments");
-                                eprintln!("{}", fetch(&route)?.into_string()?);
                                 Ok(fetch(&route)?.into_json::<Vec<Assignment>>()?)
                             },
                         )?;
