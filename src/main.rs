@@ -55,7 +55,7 @@ impl Config {
 
 // Helpers
 fn fetch(route: &str) -> Result<Response> {
-    let Config { token } = Config::read()?;
+    let Config { token } = Config::read().map_err(|_| anyhow!("Config not found, make sure to login first"))?;
     Ok(
         ureq::get(&format!("https://uia.instructure.com/api/v1/{route}"))
             .set("Authorization", &format!("Bearer {token}"))
